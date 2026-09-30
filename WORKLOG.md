@@ -3,8 +3,8 @@
 Timestamps are Asia/Dubai (UTC+4), taken from the build machine clock with `date` at the time of each entry.
 This repository was built by Claude (an AI assistant) working in a sandboxed Linux container on Merin's behalf; the log records what actually happened in that session, including dead ends.
 
-| Time | Entry |
-|---|---|
+| Time             | Entry |
+|------------------|---|
 | 2026-09-29 10:36 | Read brief. Toolchain check: JDK 21, Gradle 8.14.3, no kotlinc, no `gh` CLI. |
 | 2026-09-29 10:37 | Scaffolded Gradle Kotlin project. `gradle run` failed: plugins.gradle.org and repo.maven.apache.org return 403 from the sandbox egress proxy. Moving plugin resolution to mavenCentral() did not help (same host blocked). |
 | 2026-09-29 10:39 | Found github.com reachable. Downloaded the standalone kotlin-compiler-2.0.21.zip from JetBrains' GitHub release. JUnit Jupiter jars are not obtainable here, so the suite becomes a zero-dependency Kotlin program (see REJECTED.md, "JUnit 5"). Gradle build kept for machines with Maven Central, plus `scripts/run.sh` that needs only kotlinc. |
@@ -17,3 +17,4 @@ This repository was built by Claude (an AI assistant) working in a sandboxed Lin
 | 2026-09-29 10:49 | REJECTED.md: refused criteria 2, 4, 6, 7, 8; accepted 1, 3, 5 (5 with caveat: Auth-B is actually declined). Re-ran replay with --reject-unmatched to confirm the figures quoted for criterion 4 (D4 465.00; fee triggers -370/-180/-205) before committing. |
 | 2026-09-29 10:50 | AMBIGUITIES.md (38 entries across time/fees/interest/auth/postings/output, each marked if it changes a printed number) and NUMBERS.md. Hand-checked the "half the rate" figure: first draft said "about 0.35"; recomputed per day with HALF_EVEN (0.05+0.04+0.12+0.05+0.04+0.04) = 0.34, corrected. |
 | 2026-09-29 10:51 | README: both build paths, how to read each report section, expected-results table, suite legend, design summary. Correction to the previous entry: AMBIGUITIES.md has 42 entries, not 38 (counted with grep). README states the Gradle path is unverified in this sandbox. |
+| 2026-09-30 11:00 | Wrote the fix for NO_FEE_SCHEDULE repeating every night. Added a set of (account, value day) pairs to LedgerEngine and a check at the top of the `fee == null` block that skips a day already reported. First attempt keyed the set on `day` (tonight's processing day) instead of `d` (the value day being checked): the tests went from {2=5, 3=4, 4=3, 5=2, 6=1} to {2=5}, still wrong, because each night added a new key and value day 2 was reported again. Changed `day` to `d`; 27 tests pass and only the known-gap test fails, as intended. Replay output unchanged. Named the set `noFeeScheduleReportedDays` because days already reported as having no fee. 
