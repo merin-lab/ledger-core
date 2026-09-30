@@ -89,7 +89,7 @@ PASS  ...            <- rules and invariants (append-only, precision, idempotenc
 FAIL (known gap, see KnownGapTest.kt)  GAP a reversed erroneous posting should leave the customer whole
       -> net overdraft fees on ACC-001 after E7 was reversed: expected <AED 0.00> but was <AED -75.00>
 
-24 passed, 1 failed (1 of them the documented known gap), 0 skipped
+27 passed, 1 failed (1 of them the documented known gap), 0 skipped
 ```
 
 ## Design in one screen
@@ -105,7 +105,7 @@ src/main/kotlin/ledger/
   Replay.kt        main()
 src/test/kotlin/ledger/
   Harness.kt       ~40-line assertion harness (no JUnit; see REJECTED.md)
-  Suite.kt         main(): 24 tests
+  Suite.kt         main(): 27 tests
   KnownGapTest.kt  the one deliberately failing test
 ```
 
