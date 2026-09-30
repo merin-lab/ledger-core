@@ -36,6 +36,17 @@ fun main(args: Array<String>) {
 private fun feesOn(engine: LedgerEngine, acct: String) =
     engine.entries().filter { it.accountId == acct && it.type == EntryType.FEE }
 
+private fun noFeeSchedule(engine: LedgerEngine, acct: String) =
+    engine.notices().filter { it.code == "NO_FEE_SCHEDULE" && it.accountId == acct }
+
+/** Reads N from a NO_FEE_SCHEDULE message of the form "value day N closed at ...". Fails loudly if the format changes. */
+private fun valueDayOf(n: Notice): Int =
+    Regex("""^value day (\d+) """).find(n.message)?.groupValues?.get(1)?.toInt()
+        ?: throw AssertionError("cannot read value day from NO_FEE_SCHEDULE message: '${n.message}'")
+
+private fun noFeeScheduleCountsByValueDay(engine: LedgerEngine, acct: String): Map<Int, Int> =
+    noFeeSchedule(engine, acct).groupingBy { valueDayOf(it) }.eachCount().toSortedMap()
+
 private fun eventsUntil(id: String) = Scenario.events.takeWhile { it.id != id } + Scenario.events.first { it.id == id }
 
 // ----------------------------------------------------------------------------
@@ -198,6 +209,43 @@ private fun invariantTests(r: Registry) {
         engine.process(DebitEvent("X1", 1, "ACC-002", "1.000", BHD, 1)); engine.finish()
         assertEq(0, feesOn(engine, "ACC-002").size)
         assertTrue(engine.notices().any { it.code == "NO_FEE_SCHEDULE" }, "NO_FEE_SCHEDULE raised")
+    }
+
+    // The NO_FEE_SCHEDULE notice must fire exactly once for each day whose closing balance is negative,
+    // not once every night.
+    // Why this needed a fix: every night, assessOverdraftFees deliberately rechecks every earlier value day
+    // (so back-dated entries can make a past day negative). For AED, the booked fee stops a repeat.
+    // For BHD no fee is ever booked, so nothing stopped the same day being reported again every night.
+    // The fix remembers which (account, value day) pairs were already reported.
+    // The notice has no dedicated value-day field, so these tests read the day from the message text
+    // ("value day N ..."). If a structured field is added later, update noFeeScheduleCountsByValueDay to use it.
+    r.test("Fee: NO_FEE_SCHEDULE raised exactly once per negative value day, however many nights pass") {
+        val engine = LedgerEngine(Scenario.accounts)
+        // ACC-002 (BHD) goes negative on value day 2 and stays negative through Day 6: 5 negative days, 5 nights.
+        engine.process(DebitEvent("X1", 2, "ACC-002", "1.000", BHD, 2)); engine.finish()
+
+        assertEq(mapOf(2 to 1, 3 to 1, 4 to 1, 5 to 1, 6 to 1), noFeeScheduleCountsByValueDay(engine, "ACC-002"),
+            "NO_FEE_SCHEDULE notices per value day")
+        assertEq(0, feesOn(engine, "ACC-002").size, "still no fee booked")
+    }
+
+    r.test("Fee: NO_FEE_SCHEDULE is raised on the night the day first closes negative, and never again") {
+        val engine = LedgerEngine(Scenario.accounts)
+        engine.process(DebitEvent("X1", 2, "ACC-002", "1.000", BHD, 2)); engine.finish()
+
+        val first = noFeeSchedule(engine, "ACC-002").groupBy { valueDayOf(it) }.mapValues { (_, ns) -> ns.map { it.day } }
+        (2..6).forEach { d -> assertEq(listOf(d), first[d], "processing day(s) on which value day $d was reported") }
+    }
+
+    r.test("Fee: NO_FEE_SCHEDULE stops for days after the overdraft is cured") {
+        val engine = LedgerEngine(Scenario.accounts)
+        // Negative on value days 2 and 3; a Day 4 credit brings it back to +1.000 from value day 4 onward.
+        engine.process(DebitEvent("X1", 2, "ACC-002", "1.000", BHD, 2))
+        engine.process(CreditEvent("X2", 4, "ACC-002", "2.000", BHD, 4))
+        engine.finish()
+
+        assertEq(mapOf(2 to 1, 3 to 1), noFeeScheduleCountsByValueDay(engine, "ACC-002"),
+            "only the negative days are reported, once each")
     }
 
     r.test("Authorization boundary: available exactly zero after hold is approved") {

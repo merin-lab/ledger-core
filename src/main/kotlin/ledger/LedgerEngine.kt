@@ -46,6 +46,8 @@ class LedgerEngine(accounts: List<Account>, val policy: Policy = Policy()) {
     private val notices = ArrayList<Notice>()               // append-only
     private val reports = ArrayList<DayReport>()            // append-only
     private val seenEventIds = HashSet<String>()
+
+    private val noFeeScheduleReportedDays = HashSet<Pair<String, Day>>()
     private val eventsToday = ArrayList<String>()
     private var nextSeq = 1L
 
@@ -235,6 +237,7 @@ class LedgerEngine(accounts: List<Account>, val policy: Policy = Policy()) {
             if (!bal.isNegative()) continue
             val fee = policy.feeFor(account.currency)
             if (fee == null) {
+                if (!noFeeScheduleReportedDays.add(Pair(account.id, d))) continue
                 notices += Notice(today, Severity.ERROR, null, account.id, "NO_FEE_SCHEDULE",
                     "value day $d closed at $bal but no overdraft fee is configured for ${account.currency}")
                 continue
